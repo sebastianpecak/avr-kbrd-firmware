@@ -1,0 +1,18 @@
+{
+    "configurations": [
+        {
+            "name": "ATMEGA328P",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "/usr/avr/include",
+                "/usr/lib/gcc/avr/4.9.2/include"
+            ],
+            "defines": ["__AVR_ATmega328P__"],
+            "compilerPath": "/usr/bin/avr-g++",
+            "cStandard": "c11",
+            "cppStandard": "c++11",
+            "intelliSenseMode": "linux-gcc-x64"
+        }
+    ],
+    "version": 4
+}
