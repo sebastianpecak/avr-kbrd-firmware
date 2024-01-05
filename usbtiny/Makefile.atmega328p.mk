@@ -14,7 +14,7 @@ FLASH_CMD    = avrdude -p atmega328p -U flash:w:main.hex
 FUSES_CMD    = avrdude -p atmega328p -U hfuse:w:0xdf:m -U lfuse:w:0xef:m
 STACK        = 1024
 FLASH        = 32000
-SRAM        = 2048
+SRAM         = 2048
 SCHEM        = 
 
 include $(USBTINY)/common.mk

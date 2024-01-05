@@ -534,7 +534,7 @@ static inline void set_bit(volatile uint8_t *port, uint8_t bit)
 }
 static inline void reset_bit(volatile uint8_t *port, uint8_t bit)
 {
-    *port &= ~_BV(bit);
+    *port &= ~(_BV(bit));
 }
 static inline void toggle_bit(volatile uint8_t *port, uint8_t bit)
 {
@@ -544,6 +544,7 @@ static inline void toggle_bit(volatile uint8_t *port, uint8_t bit)
 #define HEARTH_BEAT_PIN 1
 #define DEBUG_PIN 0
 
+// DEBUG_PIN problematic???
 static void led_init()
 {
     // PORTB-1 used for USB_HID_REPORT_DESC_TYPE notification.
@@ -562,6 +563,10 @@ static void led_init()
 USB_KeyReport_t reportPrev, reportNew;
 uint8_t reportNew_keysCount;
 
+//PORTx is for sending a value out to the port when it is set as an output. PINx is for use in getting the current value from the port when it is set as an input.
+//PORTx also sets the state of the internal pull-up resistors when the port is set to input. And on more recent models, writing to PINx will toggle the value of the pins (the PORTx value) when they are set as outputs.
+//The DDxn bit in the DDRx Register selects the direction of this pin. If DDxn is written logic one, Pxn is configured as an output pin. If DDxn is written logic zero, Pxn is configured as an input pin.
+//If PORTxn is written logic one when the pin is configured as an input pin, the pull-up resistor is activated. To switch the pull-up resistor off, PORTxn has to be written logic zero or the pin has to be configured as an output pin.
 static void kbrd_init()
 {
     // Init columns.
@@ -578,6 +583,10 @@ static void kbrd_init()
     reset_bit(&DDRB, 3); // direction: input.
     reset_bit(&DDRB, 4); // direction: input.
     reset_bit(&DDRB, 5); // direction: input.
+    set_bit(&PORTB, 2); // pull-up resistor: on.
+    set_bit(&PORTB, 3); // pull-up resistor: on.
+    set_bit(&PORTB, 4); // pull-up resistor: on.
+    set_bit(&PORTB, 5); // pull-up resistor: on.
     // Reset HID-report buffers.
     memset(&reportPrev, 0, sizeof(reportPrev));
     memset(&reportNew, 0, sizeof(reportNew));
@@ -600,107 +609,112 @@ DTOR:
 
 #define MAX_KEYS_COUNT 6
 
+uint8_t is_pending_report = 0;
+
 // MAX 6 KEYS AT ONCE.
 // add protection for max keys pressed.
 static void kbrd_scan()
 {
+    // Only if there is no pending report to send.
+    if (TX_STATE_IDLE != usb_tx_state)
+    {
+        return;
+    }
+
     // Set each column low in sequence and sense rows low in sequence.
     // col-1.
     reset_bit(&PORTC, 2); // output: LOW.
-    _delay_ms(1);
+    //_delay_ms(1);
         // row-1.
-        if (0 == (PORTB & _BV(2)))
+        if (0 == (PINB & _BV(2)))
         {
             reportNew.keys[reportNew_keysCount++] = KEY_1;
         }
         // row-2.
-        if (0 == (PORTB & _BV(3)))
+        if (0 == (PINB & _BV(3)))
         {
             reportNew.keys[reportNew_keysCount++] = KEY_Q;
         }
         // row-3.
-        if (0 == (PORTB & _BV(4)))
+        if (0 == (PINB & _BV(4)))
         {
             reportNew.keys[reportNew_keysCount++] = KEY_A;
         }
         // row-4.
-        if (0 == (PORTB & _BV(5)))
+        if (0 == (PINB & _BV(5)))
         {
             reportNew.keys[reportNew_keysCount++] = KEY_Z;
         }
     set_bit(&PORTC, 2); // output: HIGH.
     // col-2.
-    // reset_bit(&PORTC, 3); // output: LOW.
-    // _delay_ms(1);
-    //     // row-1.
-    //     if (0 == (PORTB & _BV(2)))
-    //     {
-    //         reportNew.keys[reportNew_keysCount++] = KEY_2;
-    //     }
-    //     // row-2.
-    //     if (0 == (PORTB & _BV(3)))
-    //     {
-    //         reportNew.keys[reportNew_keysCount++] = KEY_W;
-    //     }
-    //     // row-3.
-    //     if (0 == (PORTB & _BV(4)))
-    //     {
-    //         reportNew.keys[reportNew_keysCount++] = KEY_S;
-    //     }
-    //     // row-4.
-    //     if (0 == (PORTB & _BV(5)))
-    //     {
-    //         reportNew.keys[reportNew_keysCount++] = KEY_X;
-    //     }
-    // set_bit(&PORTC, 3); // output: HIGH.
-    // // col-3.
-    // reset_bit(&PORTC, 4); // output: LOW.
-    // _delay_ms(1);
-    //     // row-1.
-    //     if (0 == (PORTB & _BV(2)))
-    //     {
-    //         reportNew.keys[reportNew_keysCount++] = KEY_3;
-    //     }
-    //     // row-2.
-    //     if (0 == (PORTB & _BV(3)))
-    //     {
-    //         reportNew.keys[reportNew_keysCount++] = KEY_E;
-    //     }
-    //     // row-3.
-    //     if (0 == (PORTB & _BV(4)))
-    //     {
-    //         reportNew.keys[reportNew_keysCount++] = KEY_D;
-    //     }
-    //     // row-4.
-    //     if (0 == (PORTB & _BV(5)))
-    //     {
-    //         reportNew.keys[reportNew_keysCount++] = KEY_C;
-    //     }
-    // set_bit(&PORTC, 4); // output: HIGH.
-    // // col-3.
-    // reset_bit(&PORTC, 5); // output: LOW.
-    // _delay_ms(1);
-    //     // row-1.
-    //     if (0 == (PORTB & _BV(2)))
-    //     {
-    //         reportNew.keys[reportNew_keysCount++] = KEY_4;
-    //     }
-    //     // row-2.
-    //     if (0 == (PORTB & _BV(3)))
-    //     {
-    //         reportNew.keys[reportNew_keysCount++] = KEY_R;
-    //     }
-    //     // row-3.
-    //     if (0 == (PORTB & _BV(4)))
-    //     {
-    //         reportNew.keys[reportNew_keysCount++] = KEY_F;
-    //     }
-    //     // row-4.
-    //     if (0 == (PORTB & _BV(5)))
-    //     {
-    //         reportNew.keys[reportNew_keysCount++] = KEY_V;
-    //     }
-    // set_bit(&PORTC, 5); // output: HIGH.
+    reset_bit(&PORTC, 3); // output: LOW.
+        // row-1.
+        if (0 == (PINB & _BV(2)))
+        {
+            reportNew.keys[reportNew_keysCount++] = KEY_2;
+        }
+        // row-2.
+        if (0 == (PINB & _BV(3)))
+        {
+            reportNew.keys[reportNew_keysCount++] = KEY_W;
+        }
+        // row-3.
+        if (0 == (PINB & _BV(4)))
+        {
+            reportNew.keys[reportNew_keysCount++] = KEY_S;
+        }
+        // row-4.
+        if (0 == (PINB & _BV(5)))
+        {
+            reportNew.keys[reportNew_keysCount++] = KEY_X;
+        }
+    set_bit(&PORTC, 3); // output: HIGH.
+    // col-3.
+    reset_bit(&PORTC, 4); // output: LOW.
+        // row-1.
+        if (0 == (PINB & _BV(2)))
+        {
+            reportNew.keys[reportNew_keysCount++] = KEY_3;
+        }
+        // row-2.
+        if (0 == (PINB & _BV(3)))
+        {
+            reportNew.keys[reportNew_keysCount++] = KEY_E;
+        }
+        // row-3.
+        if (0 == (PINB & _BV(4)))
+        {
+            reportNew.keys[reportNew_keysCount++] = KEY_D;
+        }
+        // row-4.
+        if (0 == (PINB & _BV(5)))
+        {
+            reportNew.keys[reportNew_keysCount++] = KEY_C;
+        }
+    set_bit(&PORTC, 4); // output: HIGH.
+    // col-3.
+    reset_bit(&PORTC, 5); // output: LOW.
+        // row-1.
+        if (0 == (PINB & _BV(2)))
+        {
+            reportNew.keys[reportNew_keysCount++] = KEY_4;
+        }
+        // row-2.
+        if (0 == (PINB & _BV(3)))
+        {
+            reportNew.keys[reportNew_keysCount++] = KEY_R;
+        }
+        // row-3.
+        if (0 == (PINB & _BV(4)))
+        {
+            reportNew.keys[reportNew_keysCount++] = KEY_F;
+        }
+        // row-4.
+        if (0 == (PINB & _BV(5)))
+        {
+            reportNew.keys[reportNew_keysCount++] = KEY_V;
+        }
+    set_bit(&PORTC, 5); // output: HIGH.
 
     ///////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////
@@ -708,8 +722,8 @@ static void kbrd_scan()
     // Send report only if new report is different from previous one.
     if (0 != memcmp(&reportPrev, &reportNew, sizeof(USB_KeyReport_t)))
     {
-        send_hid_report(&reportNew);
         memcpy(&reportPrev, &reportNew, sizeof(USB_KeyReport_t));
+        send_hid_report(&reportPrev);
         toggle_bit(&PORTB, DEBUG_PIN);
     }
 
@@ -721,27 +735,29 @@ static void kbrd_scan()
     }
 }
 
-uint8_t init_done = 0;
-
 int main()
 {
-    uint16_t counter = 0;
+    uint16_t timer_1000ms = 0;
+    uint8_t  timer_10ms  = 0;
+    uint8_t init_done = 0;
 
     led_init();
-
-    //kbrd_init();
-    //init_in_token_count();
+    kbrd_init();
     usb_init();
+    //init_in_token_count();
 
     for (;;)
     {
         usb_poll();
 
-        // if (0 != init_done)
-        // {
-        //     //kbrd_scan();
-        //     _delay_ms(1);
-        // }
+        if (0 != init_done)
+        {
+            if (timer_10ms++ >= 10)
+            {
+                kbrd_scan();
+                timer_10ms = 0;
+            }
+        }
         // else
         // {
         //     _delay_ms(1);
@@ -754,13 +770,14 @@ int main()
         // }
         // inPacketCountPrev = inPacketCount;
 
-        if (counter++ > 1000)
+        if (timer_1000ms++ >= 1000)
         {
-            //init_done = 1;
-            call_every_1000ms();
+            init_done = 1;
+            //call_every_1000ms();
             toggle_bit(&PORTB, HEARTH_BEAT_PIN);
+            //toggle_bit(&PORTB, DEBUG_PIN);
             //PORTB ^= _BV(2);
-            counter = 0;
+            timer_1000ms = 0;
         }
 
         _delay_ms(1);

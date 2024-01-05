@@ -1,4 +1,5 @@
-OUTPUT_NAME=keyboard_firmware
+OUTPUT_NAME=kbrd_fw
+OUTPUT_NAME_MCU=$(OUTPUT_NAME).$(TARGET_MCU)
 # C compiler.
 CC=$(shell which avr-gcc)
 # C++ compiler.
@@ -25,30 +26,30 @@ STACK        = 1024
 FLASH        = 32000
 SRAM        = 2048
 
-main.hex:
+$(OUTPUT_NAME_MCU).hex:
 
-all:        main.hex $(SCHEM)
+all:        $(OUTPUT_NAME_MCU).hex $(SCHEM)
 
 clean:
-	rm -f main.elf *.o tags *.sch~ gschem.log *.hex
+	rm -f *.elf *.o tags *.sch~ gschem.log *.hex
 
 clobber:    clean
-	rm -f main.hex $(SCHEM)
+	rm -f *.hex $(SCHEM)
 
-main.elf:    $(MODULES)
+$(OUTPUT_NAME_MCU).elf:    $(MODULES)
 	$(LINK.o) -o $@ $(MODULES)
 
-main.hex:    main.elf $(UTIL)/check.py
-	@python $(UTIL)/check.py main.elf $(STACK) $(FLASH) $(SRAM)
-	avr-objcopy -j .text -j .data -O ihex main.elf main.hex
+$(OUTPUT_NAME_MCU).hex:    $(OUTPUT_NAME_MCU).elf $(UTIL)/check.py
+	@python $(UTIL)/check.py $(OUTPUT_NAME_MCU).elf $(STACK) $(FLASH) $(SRAM)
+	avr-objcopy -j .text -j .data -O ihex $(OUTPUT_NAME_MCU).elf $(OUTPUT_NAME_MCU).hex
 
-check:        main.elf $(UTIL)/check.py
-	@python $(UTIL)/check.py main.elf $(STACK) $(FLASH) $(SRAM)
+check:        $(OUTPUT_NAME_MCU).elf $(UTIL)/check.py
+	@python $(UTIL)/check.py $(OUTPUT_NAME_MCU).elf $(STACK) $(FLASH) $(SRAM)
 
-disasm:        main.elf
-	avr-objdump -S main.elf
+disasm:        $(OUTPUT_NAME_MCU).elf
+	avr-objdump -S $(OUTPUT_NAME_MCU).elf
 
-flash:        main.hex
+flash:        $(OUTPUT_NAME_MCU).hex
 	$(FLASH_CMD)
 
 fuses:
@@ -71,13 +72,15 @@ main.o:        usbtiny/usb.h
 
 
 debug:
-	@echo "TARGET_MCU    : $(TARGET_MCU)"
-	@echo "MCU_FLASH_SIZE: $(MCU_FLASH_SIZE)"
-	@echo "MCU_SRAM_SIZE : $(MCU_SRAM_SIZE)"
-	@echo "MCU_STACK_SIZE: $(MCU_STACK_SIZE)"
-	@echo "MCU_FREQ      : $(MCU_FREQ)"
-	@echo "CC            : $(CC)"
-	@echo "CPPC          : $(CPPC)"
-	@echo "AVRDUDE       : $(AVRDUDE)"
-	@echo "C_SOURCES     : $(C_SOURCES)"
-	@echo "CPP_SOURCES   : $(CPP_SOURCES)"
+	@echo "TARGET_MCU     : $(TARGET_MCU)"
+	@echo "MCU_FLASH_SIZE : $(MCU_FLASH_SIZE)"
+	@echo "MCU_SRAM_SIZE  : $(MCU_SRAM_SIZE)"
+	@echo "MCU_STACK_SIZE : $(MCU_STACK_SIZE)"
+	@echo "MCU_FREQ       : $(MCU_FREQ)"
+	@echo "CC             : $(CC)"
+	@echo "CPPC           : $(CPPC)"
+	@echo "AVRDUDE        : $(AVRDUDE)"
+	@echo "C_SOURCES      : $(C_SOURCES)"
+	@echo "CPP_SOURCES    : $(CPP_SOURCES)"
+	@echo "OUTPUT_NAME    : $(OUTPUT_NAME)"
+	@echo "OUTPUT_NAME_MCU: $(OUTPUT_NAME_MCU)"
