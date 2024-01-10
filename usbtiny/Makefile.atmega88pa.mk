@@ -17,4 +17,6 @@ FLASH        = 8192
 SRAM         = 1024
 SCHEM        = 
 
+# avrdude: safemode: Fuses OK (E:FD, H:DE, L:FF)
+
 include $(USBTINY)/common.mk

@@ -527,22 +527,104 @@ void call_every_1000ms()
     usb_tx_data = (byte_t *)report;
     sei();
 }
-
+////////////////////////////////////////////////////////////////////////////////
 static inline void set_bit(volatile uint8_t *port, uint8_t bit)
 {
     *port |= _BV(bit);
 }
 static inline void reset_bit(volatile uint8_t *port, uint8_t bit)
 {
-    *port &= ~(_BV(bit));
+    *port &= ~_BV(bit);
 }
 static inline void toggle_bit(volatile uint8_t *port, uint8_t bit)
 {
     *port ^= _BV(bit);
 }
+////////////////////////////////////////////////////////////////////////////////
+typedef struct IoPort
+{
+    volatile uint8_t *dir;
+    volatile uint8_t *port;
+    volatile uint8_t *pin;
+} IoPort_t;
+////////////////////////////////////////////////////////////////////////////////
+static inline void ioport_input(const IoPort_t *ioport)
+{
+    *(ioport->dir) = 0x00;
+}
+static inline void ioport_output(const IoPort_t *ioport)
+{
+    *(ioport->dir) = 0xFF;
+}
+static inline void ioport_set(const IoPort_t *ioport)
+{
+    *(ioport->port) = 0xFF;
+}
+static inline void ioport_reset(const IoPort_t *ioport)
+{
+    *(ioport->port) = 0x00;
+}
+static inline void ioport_toggle(const IoPort_t *ioport)
+{
+    *(ioport->port) ^= 0xFF;
+}
+static inline uint8_t ioport_read(const IoPort_t *ioport)
+{
+    return *(ioport->pin);
+}
+static inline void ioport_write(const IoPort_t *ioport, uint8_t value)
+{
+    *(ioport->port) = value;
+}
+////////////////////////////////////////////////////////////////////////////////
+static const IoPort_t IO_B = {&DDRB, &PORTB, &PINB};
+static const IoPort_t IO_C = {&DDRC, &PORTC, &PINC};
+static const IoPort_t IO_D = {&DDRD, &PORTD, &PIND};
+////////////////////////////////////////////////////////////////////////////////
+typedef struct IoPin
+{
+    IoPort_t *ioConfig;
+    uint8_t pin;
+} IoPin_t;
+////////////////////////////////////////////////////////////////////////////////
+static inline void iopin_set_input(const IoPin_t *iopin)
+{
+    reset_bit(iopin->ioConfig->dir, iopin->pin);
+}
+static inline void iopin_set_output(const IoPin_t *iopin)
+{
+    set_bit(iopin->ioConfig->dir, iopin->pin);
+}
+static inline void iopin_set(const IoPin_t *iopin)
+{
+    set_bit(iopin->ioConfig->port, iopin->pin);
+}
+static inline void iopin_reset(const IoPin_t *iopin)
+{
+    reset_bit(iopin->ioConfig->port, iopin->pin);
+}
+static inline void iopin_toggle(const IoPin_t *iopin)
+{
+    toggle_bit(iopin->ioConfig->port, iopin->pin);
+}
+static inline uint8_t iopin_read(const IoPin_t *iopin)
+{
+    return (*(iopin->ioConfig->pin) & _BV(iopin->pin));
+}
+////////////////////////////////////////////////////////////////////////////////
+//static const IoPin_t IO_HEARTH_BEAT = {&IO_B, 0};
+//static const IoPin_t IO_DEBUG       = {&IO_B, 1};
+static const IoPin_t IO_HEARTH_BEAT = {&IO_D, PORTD4};
+static const IoPin_t IO_DEBUG       = {&IO_D, PORTD5};
 
-#define HEARTH_BEAT_PIN 1
-#define DEBUG_PIN 0
+// #define DIR_REG_TUPLE(_port, _pin)  DDR ## _port, _pin
+// #define PORT_REG_TUPLE(_port, _pin) (PORT ## (_port), _pin)
+// #define PIN_REG_TUPLE(_port, _pin)  (PIN ## (_port), _pin)
+
+// #define DEBUG_PORT       B, 0
+// #define HEARTH_BEAT_PORT (B, 1)
+// #define HEARTH_BEAT_PIN 1
+// #define DEBUG_PIN 0
 
 // DEBUG_PIN problematic???
 static void led_init()
@@ -554,10 +636,15 @@ static void led_init()
     //PORTB &= ~(_BV(1) | _BV(3));
     //PORTB |= _BV(2);
 
-    set_bit(&DDRB, HEARTH_BEAT_PIN); // direction: output
-    set_bit(&DDRB, DEBUG_PIN); // direction: output
-    reset_bit(&PORTB, HEARTH_BEAT_PIN);
-    reset_bit(&PORTB, DEBUG_PIN);
+    //set_bit(&DDRB, HEARTH_BEAT_PIN); // direction: output
+    //set_bit(&DDRB, DEBUG_PIN);       // direction: output
+    //reset_bit(&PORTB, HEARTH_BEAT_PIN);
+    //reset_bit(&PORTB, DEBUG_PIN);
+
+    iopin_set_output(&IO_HEARTH_BEAT);
+    iopin_set_output(&IO_DEBUG);
+    iopin_reset(&IO_HEARTH_BEAT);
+    iopin_reset(&IO_DEBUG);
 }
 
 USB_KeyReport_t reportPrev, reportNew;
@@ -567,31 +654,31 @@ uint8_t reportNew_keysCount;
 //PORTx also sets the state of the internal pull-up resistors when the port is set to input. And on more recent models, writing to PINx will toggle the value of the pins (the PORTx value) when they are set as outputs.
 //The DDxn bit in the DDRx Register selects the direction of this pin. If DDxn is written logic one, Pxn is configured as an output pin. If DDxn is written logic zero, Pxn is configured as an input pin.
 //If PORTxn is written logic one when the pin is configured as an input pin, the pull-up resistor is activated. To switch the pull-up resistor off, PORTxn has to be written logic zero or the pin has to be configured as an output pin.
-static void kbrd_init()
-{
-    // Init columns.
-    set_bit(&DDRC, 2); // direction: output.
-    set_bit(&DDRC, 3); // direction: output.
-    set_bit(&DDRC, 4); // direction: output.
-    set_bit(&DDRC, 5); // direction: output.
-    set_bit(&PORTC, 2); // output: high.
-    set_bit(&PORTC, 3); // output: high.
-    set_bit(&PORTC, 4); // output: high.
-    set_bit(&PORTC, 5); // output: high.
-    // Init rows.
-    reset_bit(&DDRB, 2); // direction: input.
-    reset_bit(&DDRB, 3); // direction: input.
-    reset_bit(&DDRB, 4); // direction: input.
-    reset_bit(&DDRB, 5); // direction: input.
-    set_bit(&PORTB, 2); // pull-up resistor: on.
-    set_bit(&PORTB, 3); // pull-up resistor: on.
-    set_bit(&PORTB, 4); // pull-up resistor: on.
-    set_bit(&PORTB, 5); // pull-up resistor: on.
-    // Reset HID-report buffers.
-    memset(&reportPrev, 0, sizeof(reportPrev));
-    memset(&reportNew, 0, sizeof(reportNew));
-    reportNew_keysCount = 0;
-}
+// static void kbrd_init()
+// {
+//     // Init columns.
+//     set_bit(&DDRC, 2); // direction: output.
+//     set_bit(&DDRC, 3); // direction: output.
+//     set_bit(&DDRC, 4); // direction: output.
+//     set_bit(&DDRC, 5); // direction: output.
+//     set_bit(&PORTC, 2); // output: high.
+//     set_bit(&PORTC, 3); // output: high.
+//     set_bit(&PORTC, 4); // output: high.
+//     set_bit(&PORTC, 5); // output: high.
+//     // Init rows.
+//     reset_bit(&DDRB, 2); // direction: input.
+//     reset_bit(&DDRB, 3); // direction: input.
+//     reset_bit(&DDRB, 4); // direction: input.
+//     reset_bit(&DDRB, 5); // direction: input.
+//     set_bit(&PORTB, 2); // pull-up resistor: on.
+//     set_bit(&PORTB, 3); // pull-up resistor: on.
+//     set_bit(&PORTB, 4); // pull-up resistor: on.
+//     set_bit(&PORTB, 5); // pull-up resistor: on.
+//     // Reset HID-report buffers.
+//     memset(&reportPrev, 0, sizeof(reportPrev));
+//     memset(&reportNew, 0, sizeof(reportNew));
+//     reportNew_keysCount = 0;
+// }
 
 static inline void send_hid_report(const USB_KeyReport_t *keyReport)
 {
@@ -611,110 +698,377 @@ DTOR:
 
 uint8_t is_pending_report = 0;
 
-// MAX 6 KEYS AT ONCE.
-// add protection for max keys pressed.
+static inline void hearth_beat()
+{
+    iopin_toggle(&IO_HEARTH_BEAT);
+    //toggle_bit(&PORTB, HEARTH_BEAT_PIN);
+}
+
+/////////////////////////////////////////////////////////////
+static const IoPin_t KBRD_IO_COLUMN[] =
+{
+    {&IO_B, PORTB0},
+    {&IO_B, PORTB1},
+    {&IO_B, PORTB2},
+    {&IO_B, PORTB3},
+    {&IO_B, PORTB4},
+    {&IO_B, PORTB5},
+    {&IO_C, PORTC0}
+};
+static const int KBRD_IO_COLUMN_SIZE = sizeof(KBRD_IO_COLUMN) / sizeof(KBRD_IO_COLUMN[0]);
+/////////////////////////////////////////////////////////////
+static const IoPin_t KBRD_IO_ROW[] =
+{
+    {&IO_C, PORTC1},
+    {&IO_C, PORTC2},
+    {&IO_C, PORTC3},
+    {&IO_C, PORTC4},
+    {&IO_C, PORTC5},
+    //{&IO_C, PORTC6}, // reserved for RESET signal.
+    {&IO_D, PORTD0},
+    {&IO_D, PORTD1}
+};
+static const int KBRD_IO_ROW_SIZE = sizeof(KBRD_IO_ROW) / sizeof(KBRD_IO_ROW[0]);
+/////////////////////////////////////////////////////////////
+
+#define KBRD_PAGE_MAX 2
+
+/**
+ * @brief Information about matix pressed key (position and page).
+ *        Used to map matrix key position to HID scan code.
+ * 
+ */
+typedef union MatrixKeyInfo
+{
+    struct
+    {
+        uint8_t row      : 3; // bit 0..2: row index.
+        uint8_t column   : 3; // bit 3..5: column index.
+        uint8_t page     : 1; // bit 6: forward or reverse scan.
+        uint8_t reserved : 1; // bit 7: not used now, must be 0.
+    };
+    uint8_t key;
+} MatrixKeyInfo_t;
+
+// Maps matrix pos X, Y (uint)
+static const uint8_t KBRD_MATRIX_POS_TO_SCAN_CODE[] =
+{
+    /////////////////////////////
+    // PAGE 0.
+    //        R P COL ROW
+    KEY_1, // 0 0 000 000
+    KEY_Q, // 0 0 000 001
+    KEY_A, // 0 0 000 010
+    KEY_Z, // 0 0 000 011
+    KEY_O, // 0 0 000 100
+    KEY_O, // 0 0 000 101
+    KEY_O, // 0 0 000 110
+    KEY_O, // 0 0 000 111
+    KEY_2, // 0 0 001 000
+    KEY_W, // 0 0 001 001
+    KEY_S, // 0 0 001 010
+    KEY_X, // 0 0 001 011
+    KEY_O, // 0 0 001 100
+    KEY_O, // 0 0 001 101
+    KEY_O, // 0 0 001 110
+    KEY_O, // 0 0 001 111
+    KEY_3, // 0 0 010 000
+    KEY_E, // 0 0 010 001
+    KEY_D, // 0 0 010 010
+    KEY_C, // 0 0 010 011
+    KEY_O, // 0 0 010 100
+    KEY_O, // 0 0 010 101
+    KEY_O, // 0 0 010 110
+    KEY_O, // 0 0 010 111
+    KEY_4, // 0 0 011 000
+    KEY_R, // 0 0 011 001
+    KEY_F, // 0 0 011 010
+    KEY_V, // 0 0 011 011
+    KEY_O, // 0 0 011 100
+    KEY_O, // 0 0 011 101
+    KEY_O, // 0 0 011 110
+    KEY_O, // 0 0 011 111
+    KEY_O, // 0 0 100 000
+    KEY_O, // 0 0 100 001
+    KEY_O, // 0 0 100 010
+    KEY_O, // 0 0 100 011
+    KEY_O, // 0 0 100 100
+    KEY_O, // 0 0 100 101
+    KEY_O, // 0 0 100 110
+    KEY_O, // 0 0 100 111
+    KEY_O, // 0 0 101 000
+    KEY_O, // 0 0 101 001
+    KEY_O, // 0 0 101 010
+    KEY_O, // 0 0 101 011
+    KEY_O, // 0 0 101 100
+    KEY_O, // 0 0 101 101
+    KEY_O, // 0 0 101 110
+    KEY_O, // 0 0 101 111
+    KEY_O, // 0 0 110 000
+    KEY_O, // 0 0 110 001
+    KEY_O, // 0 0 110 010
+    KEY_O, // 0 0 110 011
+    KEY_O, // 0 0 110 100
+    KEY_O, // 0 0 110 101
+    KEY_O, // 0 0 110 110
+    KEY_O, // 0 0 110 111
+    KEY_O, // 0 0 111 000
+    KEY_O, // 0 0 111 001
+    KEY_O, // 0 0 111 010
+    KEY_O, // 0 0 111 011
+    KEY_O, // 0 0 111 100
+    KEY_O, // 0 0 111 101
+    KEY_O, // 0 0 111 110
+    KEY_O, // 0 0 111 111
+    /////////////////////////////
+    // PAGE 1.
+    KEY_7, // 0 1 000 000
+    KEY_8, // 0 1 000 001
+    KEY_9, // 0 1 000 010
+    KEY_0, // 0 1 000 011
+    KEY_P, // 0 1 000 100
+    KEY_P, // 0 1 000 101
+    KEY_P, // 0 1 000 110
+    KEY_P, // 0 1 000 111
+    KEY_P, // 0 1 001 000
+    KEY_P, // 0 1 001 001
+    KEY_P, // 0 1 001 010
+    KEY_P, // 0 1 001 011
+    KEY_P, // 0 1 001 100
+    KEY_P, // 0 1 001 101
+    KEY_P, // 0 1 001 110
+    KEY_P, // 0 1 001 111
+    KEY_P, // 0 1 010 000
+    KEY_P, // 0 1 010 001
+    KEY_P, // 0 1 010 010
+    KEY_P, // 0 1 010 011
+    KEY_P, // 0 1 010 100
+    KEY_P, // 0 1 010 101
+    KEY_P, // 0 1 010 110
+    KEY_P, // 0 1 010 111
+    KEY_P, // 0 1 011 000
+    KEY_P, // 0 1 011 001
+    KEY_P, // 0 1 011 010
+    KEY_P, // 0 1 011 011
+    KEY_P, // 0 1 011 100
+    KEY_P, // 0 1 011 101
+    KEY_P, // 0 1 011 110
+    KEY_P, // 0 1 011 111
+    KEY_P, // 0 1 100 000
+    KEY_P, // 0 1 100 001
+    KEY_P, // 0 1 100 010
+    KEY_P, // 0 1 100 011
+    KEY_P, // 0 1 100 100
+    KEY_P, // 0 1 100 101
+    KEY_P, // 0 1 100 110
+    KEY_P, // 0 1 100 111
+    KEY_P, // 0 1 101 000
+    KEY_P, // 0 1 101 001
+    KEY_P, // 0 1 101 010
+    KEY_P, // 0 1 101 011
+    KEY_P, // 0 1 101 100
+    KEY_P, // 0 1 101 101
+    KEY_P, // 0 1 101 110
+    KEY_P, // 0 1 101 111
+    KEY_P, // 0 1 110 000
+    KEY_P, // 0 1 110 001
+    KEY_P, // 0 1 110 010
+    KEY_P, // 0 1 110 011
+    KEY_P, // 0 1 110 100
+    KEY_P, // 0 1 110 101
+    KEY_P, // 0 1 110 110
+    KEY_P, // 0 1 110 111
+    KEY_P, // 0 1 111 000
+    KEY_P, // 0 1 111 001
+    KEY_P, // 0 1 111 010
+    KEY_P, // 0 1 111 011
+    KEY_P, // 0 1 111 100
+    KEY_P, // 0 1 111 101
+    KEY_P, // 0 1 111 110
+    KEY_P  // 0 1 111 111
+};
+
+/*
+ERROR situation handling:
+1/ could switch MCU into error HID device that will send error message to host repetadely.
+*/
+
+#define ENABLE_RUNTIME_ASSERTS
+
+#if defined(ENABLE_RUNTIME_ASSERTS)
+#define ASSERT_ARRAY_RANGE(_index, _array) \
+    do { \
+        if ((_index) >= sizeof(_array)) { \
+            return; \
+        } \
+    } while (0)
+#else
+#define ASSERT_ARRAY_RANGE(_index, _array) do {} while (0)
+#endif // ENABLE_RUNTIME_ASSERTS
+
+#define IS_SCAN_CODE_MODIFIER(_scan_code) \
+    ((_scan_code) >= KEY_LEFTCTRL && (_scan_code) <= KEY_RIGHTMETA)
+
+static inline void kbrd_hid_report_update_modifier(uint8_t modifier_scan_code)
+{
+    const uint8_t bit_index = modifier_scan_code - KEY_LEFTCTRL;
+    set_bit(&reportNew.modifiers, bit_index);
+}
+
+/**
+ * @brief Pass key by value, as it is 1 byte in size.
+ * 
+ * @param key 
+ */
+static void kbrd_hid_report_update(MatrixKeyInfo_t key)
+{
+    // Make sure that key is mapped.
+    if (sizeof(KBRD_MATRIX_POS_TO_SCAN_CODE) <= key.key)
+    {
+        return; // error.
+    }
+    // Map matrix key position to HID scan code.
+    const uint8_t hidScanCode = KBRD_MATRIX_POS_TO_SCAN_CODE[key.key];
+    // Process special/modifier keys.
+    if (IS_SCAN_CODE_MODIFIER(hidScanCode))
+    {
+        kbrd_hid_report_update_modifier(key.key);
+        return;
+    }
+    // Process normal key.
+    ASSERT_ARRAY_RANGE(reportNew_keysCount, reportNew.keys); // could be disabled.
+    reportNew.keys[reportNew_keysCount++] = hidScanCode;
+}
+
+static const IoPin_t *KBRD_IO_IN  = NULL;
+static const IoPin_t *KBRD_IO_OUT = NULL;
+
+// static void kbrd_init()
+// {
+//     // Init each column.
+//     for (uint8_t col = 0; col < KBRD_IO_COLUMN_SIZE; ++col)
+//     {
+//         iopin_set_output(KBRD_IO_COLUMN + col); // direction: output.
+//         iopin_set(KBRD_IO_COLUMN + col);        // output: high.
+//     }
+//     // Init each row.
+//     for (uint8_t row = 0; row < KBRD_IO_ROW_SIZE; ++row)
+//     {
+//         iopin_set_input(KBRD_IO_ROW + row); // direction: input.
+//         iopin_set(KBRD_IO_ROW + row);       // pull-up resistor: on.
+//     }
+//     // Reset HID-report buffers.
+//     memset(&reportPrev, 0, sizeof(reportPrev));
+//     memset(&reportNew, 0, sizeof(reportNew));
+//     reportNew_keysCount = 0;
+// }
+
+static void kbrd_hid_init()
+{
+    // Reset HID-report buffers.
+    memset(&reportPrev, 0, sizeof(reportPrev));
+    memset(&reportNew, 0, sizeof(reportNew));
+    reportNew_keysCount = 0;
+}
+
+static void kbrd_page_init()
+{
+    // Init each column.
+    for (uint8_t col = 0; col < KBRD_IO_COLUMN_SIZE; ++col)
+    {
+        iopin_set_output(KBRD_IO_OUT + col); // direction: output.
+        iopin_set(KBRD_IO_OUT + col);        // output: high.
+    }
+    // Init each row.
+    for (uint8_t row = 0; row < KBRD_IO_ROW_SIZE; ++row)
+    {
+        iopin_set_input(KBRD_IO_IN + row); // direction: input.
+        iopin_set(KBRD_IO_IN + row);       // pull-up resistor: on.
+    }
+}
+
+/**
+ * @brief Configures IO for either page 0 or 1.
+ *        Page 0 is: COLUMN is output, ROW is input.
+ *        Page 1 is: COLUMN is input , ROW is output.
+ * 
+ * @param page 
+ */
+static void kbrd_set_page(uint8_t page)
+{
+    if (0 == page)
+    {
+        KBRD_IO_IN  = KBRD_IO_ROW;
+        KBRD_IO_OUT = KBRD_IO_COLUMN;
+    }
+    else
+    {
+        KBRD_IO_IN  = KBRD_IO_COLUMN;
+        KBRD_IO_OUT = KBRD_IO_ROW;
+    }
+
+    kbrd_page_init();
+}
+
+/**
+ * @brief One thing to notice - column and row index will be switched in MatrixKeyInfo_t
+ *        one page 1. Maybe need to swap them to keep indexing consistent.
+ * 
+ */
 static void kbrd_scan()
 {
+    MatrixKeyInfo_t key;
+
     // Only if there is no pending report to send.
     if (TX_STATE_IDLE != usb_tx_state)
     {
         return;
     }
 
-    // Set each column low in sequence and sense rows low in sequence.
-    // col-1.
-    reset_bit(&PORTC, 2); // output: LOW.
-    //_delay_ms(1);
-        // row-1.
-        if (0 == (PINB & _BV(2)))
+    // reserved field must be 0.
+    key.reserved = 0;
+
+    // For each page.
+    for (uint8_t page = 0; page < KBRD_PAGE_MAX; ++page)
+    {
+        // Reconfigure keyboard matrix page (switch roles of column and row).
+        kbrd_set_page(page);
+        // Update key page.
+        key.page = page;
+        // Set each column low in sequence and sense rows low in sequence.
+        for (uint8_t col = 0; col < KBRD_IO_COLUMN_SIZE; ++col)
         {
-            reportNew.keys[reportNew_keysCount++] = KEY_1;
+            iopin_reset(KBRD_IO_OUT + col); // output: LOW.
+            key.column = col;
+            for (uint8_t row = 0; row < KBRD_IO_ROW_SIZE; ++row)
+            {
+                if (0 != iopin_read(KBRD_IO_IN + row)) // not pressed.
+                {
+                    continue;
+                }
+                // Make full key.
+                key.row = row;
+                // Save pressed key in report.
+                kbrd_hid_report_update(key);
+                // Check if report is full.
+                if (reportNew_keysCount >= 6) // check cannot be disabled.
+                {
+                    break;
+                }
+            }
+            iopin_set(KBRD_IO_OUT + col);   // output: HIGH.
+            // Check if report is full.
+            if (reportNew_keysCount >= 6) // check cannot be disabled.
+            {
+                break;
+            }
         }
-        // row-2.
-        if (0 == (PINB & _BV(3)))
+        // Check if report is full.
+        if (reportNew_keysCount >= 6) // check cannot be disabled.
         {
-            reportNew.keys[reportNew_keysCount++] = KEY_Q;
+            break;
         }
-        // row-3.
-        if (0 == (PINB & _BV(4)))
-        {
-            reportNew.keys[reportNew_keysCount++] = KEY_A;
-        }
-        // row-4.
-        if (0 == (PINB & _BV(5)))
-        {
-            reportNew.keys[reportNew_keysCount++] = KEY_Z;
-        }
-    set_bit(&PORTC, 2); // output: HIGH.
-    // col-2.
-    reset_bit(&PORTC, 3); // output: LOW.
-        // row-1.
-        if (0 == (PINB & _BV(2)))
-        {
-            reportNew.keys[reportNew_keysCount++] = KEY_2;
-        }
-        // row-2.
-        if (0 == (PINB & _BV(3)))
-        {
-            reportNew.keys[reportNew_keysCount++] = KEY_W;
-        }
-        // row-3.
-        if (0 == (PINB & _BV(4)))
-        {
-            reportNew.keys[reportNew_keysCount++] = KEY_S;
-        }
-        // row-4.
-        if (0 == (PINB & _BV(5)))
-        {
-            reportNew.keys[reportNew_keysCount++] = KEY_X;
-        }
-    set_bit(&PORTC, 3); // output: HIGH.
-    // col-3.
-    reset_bit(&PORTC, 4); // output: LOW.
-        // row-1.
-        if (0 == (PINB & _BV(2)))
-        {
-            reportNew.keys[reportNew_keysCount++] = KEY_3;
-        }
-        // row-2.
-        if (0 == (PINB & _BV(3)))
-        {
-            reportNew.keys[reportNew_keysCount++] = KEY_E;
-        }
-        // row-3.
-        if (0 == (PINB & _BV(4)))
-        {
-            reportNew.keys[reportNew_keysCount++] = KEY_D;
-        }
-        // row-4.
-        if (0 == (PINB & _BV(5)))
-        {
-            reportNew.keys[reportNew_keysCount++] = KEY_C;
-        }
-    set_bit(&PORTC, 4); // output: HIGH.
-    // col-3.
-    reset_bit(&PORTC, 5); // output: LOW.
-        // row-1.
-        if (0 == (PINB & _BV(2)))
-        {
-            reportNew.keys[reportNew_keysCount++] = KEY_4;
-        }
-        // row-2.
-        if (0 == (PINB & _BV(3)))
-        {
-            reportNew.keys[reportNew_keysCount++] = KEY_R;
-        }
-        // row-3.
-        if (0 == (PINB & _BV(4)))
-        {
-            reportNew.keys[reportNew_keysCount++] = KEY_F;
-        }
-        // row-4.
-        if (0 == (PINB & _BV(5)))
-        {
-            reportNew.keys[reportNew_keysCount++] = KEY_V;
-        }
-    set_bit(&PORTC, 5); // output: HIGH.
+    }
 
     ///////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////
@@ -724,7 +1078,7 @@ static void kbrd_scan()
     {
         memcpy(&reportPrev, &reportNew, sizeof(USB_KeyReport_t));
         send_hid_report(&reportPrev);
-        toggle_bit(&PORTB, DEBUG_PIN);
+        iopin_toggle(&IO_DEBUG);
     }
 
     // Reset new report if needed.
@@ -742,14 +1096,13 @@ int main()
     uint8_t init_done = 0;
 
     led_init();
-    kbrd_init();
+    //kbrd_init();
+    kbrd_set_page(0);
+    kbrd_hid_init();
     usb_init();
-    //init_in_token_count();
 
     for (;;)
     {
-        usb_poll();
-
         if (0 != init_done)
         {
             if (timer_10ms++ >= 10)
@@ -758,26 +1111,17 @@ int main()
                 timer_10ms = 0;
             }
         }
-        // else
-        // {
-        //     _delay_ms(1);
-        // }
 
-        // load_in_token_count();
-        // if (inPacketCount != inPacketCountPrev)
-        // {
-        //     PORTB ^= _BV(3);
-        // }
-        // inPacketCountPrev = inPacketCount;
+        usb_poll();
 
         if (timer_1000ms++ >= 1000)
         {
             init_done = 1;
-            //call_every_1000ms();
-            toggle_bit(&PORTB, HEARTH_BEAT_PIN);
-            //toggle_bit(&PORTB, DEBUG_PIN);
-            //PORTB ^= _BV(2);
             timer_1000ms = 0;
+
+            //call_every_1000ms();
+
+            hearth_beat();
         }
 
         _delay_ms(1);
